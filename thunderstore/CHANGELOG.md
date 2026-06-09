@@ -1,0 +1,5 @@
+* v1.0.0 first release
+  - Adds the missing Steamworks recv-buffer enum members (RecvBufferSize / RecvBufferMessages / RecvMaxMessageSize / RecvMaxSegmentsPerPacket) to Steamworks.ESteamNetworkingConfigValue at preload time, so FGN can wire its recv-buffer config knobs without crashing on missing enum values.
+  - Raises ZDOMan.SendZDOs outbound queue cap from 10240 to 102400 bytes (10x) by rewriting the constant in IL. Lets FGN's send-rate tier presets actually push more data per tick.
+  - Dedicated-server gate: process name has to contain "server" (matches valheim_server.exe / valheim_server.x86_64 / user-renamed variants) or the patcher exits early and touches nothing. Both patches only affect server-side network behavior so a client install would be wasted IL rewrites and the gate keeps the impact strictly where it's intended.
+  - FGN-presence gate: if no DLL matching `*GhettoNetwork*.dll` is found under `BepInEx/plugins/`, the patcher exits early. Both gates are checked in TargetDLLs (so BepInEx never even loads Cecil) and again defensively in Patch().
