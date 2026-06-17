@@ -40,30 +40,17 @@ namespace FiresSteamworksPatcher
             ("k_ESteamNetworkingConfig_RecvMaxSegmentsPerPacket",  50),
         };
 
-        // Cached one-shot checks. Each is nullable so we can distinguish
-        // "not yet checked" from "checked and false."
+        // Nullable so we can distinguish "not yet checked" from "checked and false."
         private static bool? _ghettoNetworkingPresent;
         private static bool? _isDedicatedServer;
 
-        // BepInEx evaluates TargetDLLs once during patcher discovery. We return
-        // an empty enumeration when either gate fails so BepInEx never even
-        // loads Cecil for our target assemblies. Patch() is also defensively
-        // gated for the rare case where BepInEx caches the pre-detection
-        // result and calls us anyway.
+        // Runs on both dedicated servers and clients when FGN is present. Both patches are additive:
+        // the recv-buffer enums are no-ops until SetConnectionConfig sets them, and the SendZDOs queue
+        // cap raise only changes behavior under heavy backpressure.
         public static IEnumerable<string> TargetDLLs
         {
             get
             {
-                if (!IsDedicatedServer())
-                {
-                    Log.LogInfo(
-                        "Not running as a dedicated server — FiresSteamworksPatcher will not " +
-                        "patch any assemblies. Both patches (Steam recv-buffer enum members and " +
-                        "ZDOMan.SendZDOs queue cap) only affect server-side network behavior, " +
-                        "so the patcher is no-op on client installs even when FGN is present.");
-                    return Array.Empty<string>();
-                }
-
                 if (!IsGhettoNetworkingInstalled())
                 {
                     Log.LogInfo(
@@ -73,6 +60,9 @@ namespace FiresSteamworksPatcher
                         "features and has no other effect; without FGN there's nothing to do.");
                     return Array.Empty<string>();
                 }
+
+                Log.LogInfo($"FiresGhettoNetworking detected — patcher will run on this " +
+                    $"{(IsDedicatedServer() ? "dedicated server" : "client")} install.");
 
                 return new[]
                 {
@@ -86,16 +76,6 @@ namespace FiresSteamworksPatcher
         {
             var assemblyName = assembly.Name?.Name ?? "<unknown>";
 
-            // Defensive second gates. TargetDLLs already filters us out when we
-            // aren't a server or FGN is missing, but a future BepInEx that
-            // caches the pre-detection result more aggressively could in
-            // principle still hand us an assembly. Bail explicitly so we never
-            // silently improve a client install or a non-FGN server install.
-            if (!IsDedicatedServer())
-            {
-                Log.LogInfo($"{assemblyName}: not a dedicated server, leaving assembly untouched.");
-                return;
-            }
             if (!IsGhettoNetworkingInstalled())
             {
                 Log.LogInfo($"{assemblyName}: FGN not present, leaving assembly untouched.");
@@ -120,52 +100,28 @@ namespace FiresSteamworksPatcher
             }
         }
 
+        /// Detect via exe name + directory: preloader runs before Unity initializes, so the FGN runtime
+        /// checks (Application.isBatchMode, ZNet reflection) aren't available yet.
         private static bool IsDedicatedServer()
         {
             if (_isDedicatedServer.HasValue) return _isDedicatedServer.Value;
 
             try
             {
-                // Mirrors FiresGhettoNetworking's ServerClientUtils.Detect() exe
-                // name + exe directory checks. The other methods FGN uses
-                // (Application.isBatchMode, ZNet reflection, GraphicsDeviceType)
-                // aren't available at preloader-patch time — Unity isn't fully
-                // initialized yet and ZNet doesn't exist — so we stick to the
-                // filesystem-derived signals which work this early.
-                //
-                // Wildcard semantics: ".Contains(server)" on a lowercased name
-                // is the equivalent of "*server*" — catches valheim_server.exe,
-                // valheim_server.x86_64, valheim_server1.exe, server2.exe,
-                // myserver.exe, anything an op might have renamed to.
-                //
-                // Directory check catches the common "Valheim Server 1\" and
-                // "dedicated_server\" folder patterns where the exe itself was
-                // left at vanilla name.
                 string exePath = Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
                 string exeName = Path.GetFileNameWithoutExtension(exePath).ToLowerInvariant();
                 string exeDir  = Path.GetDirectoryName(exePath)?.ToLowerInvariant() ?? string.Empty;
 
-                if (exeName.Contains("server"))
+                if (exeName.Contains("server") || exeDir.Contains("server") || exeDir.Contains("dedicated"))
                 {
                     _isDedicatedServer = true;
                     return true;
                 }
-
-                if (exeDir.Contains("server") || exeDir.Contains("dedicated"))
-                {
-                    _isDedicatedServer = true;
-                    return true;
-                }
-
                 _isDedicatedServer = false;
             }
             catch (Exception ex)
             {
-                // Fail closed — if we can't tell what process we're in, don't
-                // patch. Better to leave a server unmodified and have the user
-                // notice + investigate than to silently activate on a client.
-                Log.LogInfo($"Could not read process info ({ex.GetType().Name}: {ex.Message}); " +
-                            "treating as 'not a server'.");
+                Log.LogInfo($"Could not read process info ({ex.GetType().Name}: {ex.Message}); treating as 'not a server'.");
                 _isDedicatedServer = false;
             }
 
@@ -184,22 +140,12 @@ namespace FiresSteamworksPatcher
                     _ghettoNetworkingPresent = false;
                     return false;
                 }
-
-                // r2modman / Thunderstore / vortex all unpack into per-mod subfolders
-                // beneath BepInEx/plugins/, so a recursive scan is mandatory.
-                // Directory.GetFiles + AllDirectories is case-insensitive on the
-                // NTFS / FAT filesystems Valheim ships on.
-                var matches = Directory.GetFiles(
-                    pluginsDir, GhettoNetworkingDllGlob, SearchOption.AllDirectories);
+                var matches = Directory.GetFiles(pluginsDir, GhettoNetworkingDllGlob, SearchOption.AllDirectories);
                 _ghettoNetworkingPresent = matches.Length > 0;
             }
             catch (Exception ex)
             {
-                // If we can't scan for any reason, fail closed: don't patch.
-                // Logging at Info, not Error — this is a normal "no FGN" path
-                // for most users and the patcher just sits idle.
-                Log.LogInfo($"Could not scan plugins directory ({ex.GetType().Name}: {ex.Message}); " +
-                            "treating as 'FGN not present'.");
+                Log.LogInfo($"Could not scan plugins directory ({ex.GetType().Name}: {ex.Message}); treating as 'FGN not present'.");
                 _ghettoNetworkingPresent = false;
             }
 
