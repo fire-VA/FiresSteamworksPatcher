@@ -1,8 +1,8 @@
 {
     "name": "FiresSteamworksPatcher",
-    "version_number": "1.0.0",
+    "version_number": "1.1.0",
     "website_url": "https://github.com/fire-VA/FiresSteamworksPatcher",
-    "description": "Dedicated-server-side BepInEx preloader patcher for FiresGhettoNetworking — adds missing Steamworks recv-buffer enum members and raises ZDOMan.SendZDOs queue cap. No-op on clients and on servers without FGN.",
+    "description": "BepInEx preloader patcher for FiresGhettoNetworking: adds the missing Steamworks recv-buffer enum members and raises the ZDOMan.SendZDOs queue cap so FGN's tuning reaches its full ceiling. Runs on servers and clients wherever FGN is installed.",
     "dependencies": [
         "denikson-BepInExPack_Valheim-5.4.2202",
         "VerdantsAscent-FiresGhettoNetworking-1.3.0"

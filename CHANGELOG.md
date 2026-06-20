@@ -1,3 +1,8 @@
+* v1.1.0
+  - The patcher now runs on **clients as well as dedicated servers** — anywhere FiresGhettoNetworking is installed. The previous dedicated-server-only process gate is gone; the FGN-presence check is the only remaining gate.
+  - Why the client matters now: FGN's receive-buffer settings apply on the client too. A client needs matching receive headroom to keep up with a high-throughput server (HyperBoost / high AutoTune tiers push well past vanilla rates), and the patched enum members are what let FGN enlarge the client's receive buffers. Without the patcher those settings cap at Steam's defaults instead of erroring.
+  - No change to what gets patched: same recv-buffer enum members and the same ZDOMan.SendZDOs queue-cap raise (10240 -> 102400) as 1.0.0.
+
 * v1.0.0 first release
   - Adds the missing Steamworks recv-buffer enum members (RecvBufferSize / RecvBufferMessages / RecvMaxMessageSize / RecvMaxSegmentsPerPacket) to Steamworks.ESteamNetworkingConfigValue at preload time, so FGN can wire its recv-buffer config knobs without crashing on missing enum values.
   - Raises ZDOMan.SendZDOs outbound queue cap from 10240 to 102400 bytes (10x) by rewriting the constant in IL. Lets FGN's send-rate tier presets actually push more data per tick.

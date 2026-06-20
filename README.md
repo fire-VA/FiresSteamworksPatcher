@@ -1,14 +1,13 @@
 # FiresSteamworksPatcher
 
-**Dedicated-server-side** BepInEx preloader patcher that makes two surgical changes to Valheim's bundled assemblies, so [FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/) can use the Steam networking knobs and ZDO queue sizes it ships configs for.
+BepInEx preloader patcher that makes two surgical changes to Valheim's bundled assemblies, so [FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/) can use the Steam networking knobs and ZDO queue sizes it ships configs for. **Install it wherever FGN runs — the dedicated server and every client.**
 
-This package only does anything when **all three** of these are true on the machine:
+This package only does anything when **both** of these are true on the machine:
 
-1. The process is a dedicated Valheim server (`valheim_server.exe` / `valheim_server.x86_64` — checked via process name).
-2. **FiresGhettoNetworking** is also installed (a `*GhettoNetwork*.dll` is present anywhere under `BepInEx/plugins/`).
-3. BepInEx loads the patcher at preload (i.e. the DLL is in `BepInEx/patchers/`).
+1. **FiresGhettoNetworking** is installed (a `*GhettoNetwork*.dll` is present anywhere under `BepInEx/plugins/`).
+2. BepInEx loads the patcher at preload (i.e. the DLL is in `BepInEx/patchers/`).
 
-Anything else and the patcher exits with a single log line and touches nothing. Don't install this on a client expecting a performance bump — there isn't one. Don't install this on a server without FGN expecting one — there isn't one there either.
+If FGN isn't present, the patcher writes a single log line and touches nothing — it has no effect of its own and no config file to tune.
 
 > Need help, found a bug, want a feature? **https://discord.gg/H9uKGcAujs**
 
@@ -18,8 +17,8 @@ Anything else and the patcher exits with a single log line and touches nothing. 
 
 | Target | What it does |
 |--------|--------------|
-| `Steamworks.ESteamNetworkingConfigValue` (in `com.rlabrecque.steamworks.net.dll`) | Adds four missing enum literals — `k_ESteamNetworkingConfig_RecvBufferSize` (47), `RecvBufferMessages` (48), `RecvMaxMessageSize` (49), `RecvMaxSegmentsPerPacket` (50). Valheim ships an older Steamworks SDK that doesn't expose these; without them, FGN's server-side recv-buffer config knobs would throw `MissingFieldException` when it tries to look them up via reflection. |
-| `ZDOMan.SendZDOs` (in `assembly_valheim.dll`) | Locates the outbound send-queue cap constant (10240 bytes in vanilla) near a `GetSendQueueSize` call and rewrites it to 102400 (10×). FGN's per-client send-rate tier presets can configure Steam to push 50–200 KB/s outbound; the vanilla 10 KB queue caps that ceiling regardless of what Steam will accept. This bump lets the queue actually hold a frame of high-tier traffic. |
+| `Steamworks.ESteamNetworkingConfigValue` (in `com.rlabrecque.steamworks.net.dll`) | Adds four missing enum literals — `k_ESteamNetworkingConfig_RecvBufferSize` (47), `RecvBufferMessages` (48), `RecvMaxMessageSize` (49), `RecvMaxSegmentsPerPacket` (50). Valheim ships an older Steamworks SDK that doesn't expose these; without them, FGN's recv-buffer config knobs would throw `MissingFieldException` when it looks them up via reflection. |
+| `ZDOMan.SendZDOs` (in `assembly_valheim.dll`) | Locates the outbound send-queue cap constant (10240 bytes in vanilla) near a `GetSendQueueSize` call and rewrites it to 102400 (10×). FGN's per-peer send-rate tiers can configure Steam to push far past vanilla rates; the 10 KB queue caps that ceiling regardless of what Steam will accept. This bump lets the queue actually hold a frame of high-tier traffic. |
 
 Both edits are done via Cecil at preload time — BEFORE Harmony exists, BEFORE any plugin Awakes. There's no Harmony-equivalent for either patch:
 
@@ -28,54 +27,54 @@ Both edits are done via Cecil at preload time — BEFORE Harmony exists, BEFORE 
 
 ---
 
-## Why server-only
+## Where it helps — server *and* client
 
-The dedicated server is the heavy outbound sender — it pushes ZDO updates to every connected peer every tick, configures per-connection Steam sockets to each of them, and is the bottleneck during initial-sync floods. Both patches target exactly that side:
+Earlier builds gated this patcher to dedicated servers only. As of **1.1.0** it runs anywhere FGN is installed, because both edits pull their weight on the client too:
 
-- **ZDOMan.SendZDOs queue cap** — on a client, `SendZDOs` runs but only pushes ZDOs the client owns (their player character, dropped items briefly, sometimes a tamed companion). That traffic is well under the 10 KB vanilla cap, so raising the cap on a client is a no-op.
-- **Steamworks recv-buffer enums** — FGN's recv-buffer configuration is server-side; it applies to the server's accept-from-peer sockets. A client only has one socket (to the server) and configures it from the client side via different code paths that don't go through these enum values.
+- **Dedicated server** — the heavy outbound sender: it pushes ZDO updates to every peer each tick and configures a Steam socket per connection. The recv-buffer enums size its accept-from-peer receive buffers, and the `SendZDOs` queue cap raises its outbound ceiling during initial-sync floods.
+- **Client** — a client receiving a high-throughput server (FGN's HyperBoost or high AutoTune tiers push well past vanilla rates) needs matching receive headroom or it bottlenecks on ingest. The recv-buffer enums are what let FGN enlarge the client's receive buffers to keep up. The `SendZDOs` queue cap is a smaller win client-side — a client sends comparatively little — but it's harmless and applies in the cases where a client does own and push more.
 
-The patcher checks `Process.GetCurrentProcess().ProcessName` for the substring "server" (case-insensitive). Catches `valheim_server.exe`, `valheim_server.x86_64`, and any user-renamed variant that follows the naming convention. Fail-closed — if we can't read the process name for any reason, we treat it as "not a server" and skip patching.
+Without this patcher, FGN still runs: its recv-buffer settings simply cap at Steam's defaults instead of erroring. The patcher is what unlocks the full receive ceiling on both ends.
 
 ## FGN gate
 
-Even on the server, the patches only do something useful when FGN is installed and reading them. So the second gate scans `BepInEx/plugins/` recursively for any DLL whose name matches `*GhettoNetwork*.dll`. If nothing matches:
+The patcher scans `BepInEx/plugins/` recursively for any DLL whose name matches `*GhettoNetwork*.dll`. If nothing matches:
 
-1. `TargetDLLs` returns an empty list, so BepInEx skips loading Cecil for Steamworks / assembly_valheim entirely.
+1. `TargetDLLs` returns an empty list, so BepInEx never loads Cecil for Steamworks / assembly_valheim.
 2. Defensively, `Patch()` also short-circuits if it's somehow called anyway.
-3. A single log line is written: `FiresGhettoNetworking not detected … FiresSteamworksPatcher will not patch any assemblies.`
+3. A single log line is written: `FiresGhettoNetworking not detected … will not patch any assemblies.`
 
-This gate exists because the Steamworks enum additions are inert without something reading them, and the queue cap raise is real but small on its own — pairing it with FGN's send-rate tier presets is where the actual win lives. Shipping the patcher to a non-FGN server would either be no-op (best case) or quietly improve other networking mods' headroom (worst case, and the reason this gate exists).
+This gate exists because the enum additions are inert without FGN reading them, and the queue-cap raise is small on its own — the win comes from pairing both with FGN's send-rate tiers. Shipping the patcher to a non-FGN install would be a no-op at best, so the gate keeps it from quietly altering other networking mods' headroom.
 
-Both gates are evaluated once per process and cached. Cost is one `Process.GetCurrentProcess()` and one `Directory.GetFiles(... AllDirectories)` at startup, then nothing.
+The gate is evaluated once per process and cached — one `Directory.GetFiles(... AllDirectories)` at startup, then nothing.
 
 ---
 
 ## Installation
 
-1. On the **dedicated server**: install BepInEx — the [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) on Thunderstore is the standard one.
-2. On the **dedicated server**: install [FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/) — this patcher does nothing without it.
-3. On the **dedicated server**: install this package. The `patchers/` folder from the zip drops into `BepInEx/` so the DLL lands at `BepInEx/patchers/<author>-FiresSteamworksPatcher/patchers/FiresSteamworksPatcher.dll`. r2modman / Thunderstore Mod Manager handle this automatically.
-4. Restart the server.
+Install on **every machine running FGN** — the dedicated server and each client:
 
-Preloader patchers don't have a config file — there's nothing to tune. Either both gates pass and the two patches land, or one of them fails and the patcher idles.
+1. Install BepInEx — the [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) on Thunderstore is the standard one.
+2. Install [FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/) — this patcher does nothing without it.
+3. Install this package. The `patchers/` folder from the zip drops into `BepInEx/` so the DLL lands at `BepInEx/patchers/<author>-FiresSteamworksPatcher/patchers/FiresSteamworksPatcher.dll`. r2modman / Thunderstore Mod Manager handle this automatically.
+4. Restart the game / server.
 
-### Where this needs to be installed
+Preloader patchers have no config file — there's nothing to tune. Either FGN is present and the two patches land, or it isn't and the patcher idles.
 
-| Side | Needs the patcher? |
-|------|:------------------:|
-| Dedicated server | ✓ |
-| Client | — (runtime-gated to no-op even if installed) |
-| Listen-server host (player hosting via the in-game menu) | — (process is `valheim.exe`, not `valheim_server.exe` — gate treats as client) |
+### Where to install
 
-If you run a listen-server (host through the game's in-game menu, not the standalone dedicated-server binary), you can still benefit from FGN itself, but this patcher won't apply because the process name doesn't match.
+| Side | Install the patcher? |
+|------|----------------------|
+| Dedicated server | ✓ — sizes accept-from-peer recv buffers + raises the outbound queue cap |
+| Client | ✓ — sizes the client's recv buffers to keep up with a high-throughput server |
+| Listen-server host (hosting via the in-game menu) | ✓ — acts as both server and client; install it like any client |
 
 ---
 
 ## Compatibility
 
-- **FiresGhettoNetworking** — designed for. If FGN is installed on the server, the patcher activates. If FGN isn't, the patcher is a no-op.
-- **BetterNetworking / Serverside Simulations / any other networking overhaul** — the FGN gate ensures we won't accidentally improve them. If you uninstall FGN to try another mod, this patcher will detect it's gone and stop applying its patches on the next launch.
+- **FiresGhettoNetworking** — designed for. If FGN is installed, the patcher activates; if not, it's a no-op.
+- **BetterNetworking / Serverside Simulations / any other networking overhaul** — the FGN gate ensures we won't accidentally alter them. If you uninstall FGN to try another mod, this patcher detects it's gone and stops patching on the next launch.
 - **Other preloader patchers** — coexists. Cecil load order is deterministic (alphabetical by patcher folder). Our edits are additive (one new enum member set, one constant rewrite) and don't conflict with anything I'm aware of.
 
 ## License
