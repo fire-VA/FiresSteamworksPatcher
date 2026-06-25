@@ -1,3 +1,6 @@
+* v1.1.1 packaging fix — installs to BepInEx/patchers/ correctly
+  - Fixed the Thunderstore package layout: the patcher DLL now sits inside a `patchers/` folder, so mod managers install it to `BepInEx/patchers/` instead of `BepInEx/plugins/`. The 1.1.0 package shipped the DLL at the zip root, which r2modman/Thunderstore route to `plugins/` — where a preloader patcher never runs.
+  - No code change: identical client + server patcher to 1.1.0, just packaged correctly.
 * v1.1.0
   - The patcher now runs on **clients as well as dedicated servers** — anywhere FiresGhettoNetworking is installed. The previous dedicated-server-only process gate is gone; the FGN-presence check is the only remaining gate.
   - Why the client matters now: FGN's receive-buffer settings apply on the client too. A client needs matching receive headroom to keep up with a high-throughput server (HyperBoost / high AutoTune tiers push well past vanilla rates), and the patched enum members are what let FGN enlarge the client's receive buffers. Without the patcher those settings cap at Steam's defaults instead of erroring.

@@ -1,6 +1,6 @@
 {
     "name": "FiresSteamworksPatcher",
-    "version_number": "1.1.0",
+    "version_number": "1.1.1",
     "website_url": "https://github.com/fire-VA/FiresSteamworksPatcher",
     "description": "BepInEx preloader patcher for FiresGhettoNetworking: adds the missing Steamworks recv-buffer enum members and raises the ZDOMan.SendZDOs queue cap so FGN's tuning reaches its full ceiling. Runs on servers and clients wherever FGN is installed.",
     "dependencies": [
