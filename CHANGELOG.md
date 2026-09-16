@@ -1,3 +1,6 @@
+* v1.1.2 - updated for Valheim 1.0
+  - no longer lists FiresGhettoNetworking as a dependency, so installing the patcher can no longer pull in an old FGN; install the latest FGN alongside it
+  - no code change: both patches still apply on Valheim 1.0, on clients and dedicated servers
 * v1.1.1 packaging fix — installs to BepInEx/patchers/ correctly
   - Fixed the Thunderstore package layout: the patcher DLL now sits inside a `patchers/` folder, so mod managers install it to `BepInEx/patchers/` instead of `BepInEx/plugins/`. The 1.1.0 package shipped the DLL at the zip root, which r2modman/Thunderstore route to `plugins/` — where a preloader patcher never runs.
   - No code change: identical client + server patcher to 1.1.0, just packaged correctly.

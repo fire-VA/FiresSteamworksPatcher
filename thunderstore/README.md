@@ -1,6 +1,14 @@
 # FiresSteamworksPatcher
 
+**Updated for Valheim 1.0.**
+
 BepInEx preloader patcher that makes two surgical changes to Valheim's bundled assemblies, so [FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/) can use the Steam networking knobs and ZDO queue sizes it ships configs for. **Install it wherever FGN runs — the dedicated server and every client.**
+
+> **FiresGhettoNetworking is required, but not listed as a dependency.** Earlier versions of this package listed
+> FGN as a dependency, which pinned a specific FGN version: every FGN update meant a new patcher release, and an
+> outdated pin could pull in an old FGN that no longer works on the current game. The dependency was removed so the
+> patcher never has to change when FGN does. **You still need FGN installed for this patcher to do anything** -
+> without it the patcher writes one log line and patches nothing.
 
 This package only does anything when **both** of these are true on the machine:
 
@@ -55,7 +63,7 @@ The gate is evaluated once per process and cached — one `Directory.GetFiles(..
 Install on **every machine running FGN** — the dedicated server and each client:
 
 1. Install BepInEx — the [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) on Thunderstore is the standard one.
-2. Install [FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/) — this patcher does nothing without it.
+2. Install [FiresGhettoNetworking](https://thunderstore.io/c/valheim/p/VerdantsAscent/FiresGhettoNetworking/) yourself — mod managers will not add it for you, because it is deliberately not a listed dependency, and this patcher does nothing without it.
 3. Install this package. The `patchers/` folder from the zip drops into `BepInEx/` so the DLL lands at `BepInEx/patchers/<author>-FiresSteamworksPatcher/patchers/FiresSteamworksPatcher.dll`. r2modman / Thunderstore Mod Manager handle this automatically.
 4. Restart the game / server.
 

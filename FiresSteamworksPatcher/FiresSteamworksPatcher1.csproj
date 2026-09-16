@@ -13,6 +13,7 @@
     <LangVersion>latest</LangVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
